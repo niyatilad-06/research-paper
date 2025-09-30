@@ -1,5 +1,6 @@
+# app.py
 import streamlit as st
-import fitz
+import fitz  # PyMuPDF
 import re
 import nltk
 from nltk.corpus import stopwords
@@ -7,9 +8,16 @@ from rake_nltk import Rake
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
-# Download stopwords at runtime
+# -------------------------
+# Setup
+# -------------------------
+nltk.download('punkt')
 nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
+
+st.set_page_config(page_title="Research Paper Assistant", layout="wide")
+st.title("📄 Research Paper Assistant Dashboard")
+st.info("Upload PDFs to extract keywords, summarize, and find related papers.")
 
 # -------------------------
 # Functions
@@ -25,7 +33,8 @@ def extract_text_from_pdf(file):
 def preprocess_text(text):
     text = text.lower()
     text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[^a-zA-Z ]', '', text)
+    # Keep numbers and basic punctuation
+    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
     words = text.split()
     words = [word for word in words if word not in stop_words]
     return ' '.join(words)
@@ -44,7 +53,11 @@ def load_models():
 summarizer, embed_model = load_models()
 
 def summarize_text(text, max_len=150):
-    chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
+    sentences = nltk.sent_tokenize(text)
+    chunks, chunk_size = [], 20  # 20 sentences per chunk
+    for i in range(0, len(sentences), chunk_size):
+        chunk = " ".join(sentences[i:i+chunk_size])
+        chunks.append(chunk)
     summaries = []
     for chunk in chunks:
         try:
@@ -65,51 +78,59 @@ def find_related_papers(paper_idx, embeddings, paper_names, top_n=3):
     return [paper_names[i] for i in related_idx]
 
 # -------------------------
-# UI Layout
+# Sidebar controls
 # -------------------------
-st.set_page_config(page_title="Research Paper Assistant", layout="wide")
-
-st.title("📄 Research Paper Assistant Dashboard")
-st.info("Upload multiple PDFs to extract keywords, summarize, and find related papers.")
-
-uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
-
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
 summary_length = st.sidebar.slider("Summary max length", 50, 300, 150)
 
+# -------------------------
+# File uploader
+# -------------------------
+uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
+
 if uploaded_files:
-    st.success(f"{len(uploaded_files)} files uploaded.")
+    st.success(f"{len(uploaded_files)} file(s) uploaded.")
     
     if st.button("Process PDFs"):
-        paper_texts, paper_names = [], []
+        paper_texts_raw, paper_texts_clean, paper_names = [], [], []
 
         for file in uploaded_files:
             text = extract_text_from_pdf(file)
-            clean_text = preprocess_text(text)
-            paper_texts.append(clean_text)
+            paper_texts_raw.append(text)
+            paper_texts_clean.append(preprocess_text(text))
             paper_names.append(file.name)
 
-        embeddings = embed_model.encode(paper_texts, convert_to_tensor=True)
+        # Generate embeddings for related papers using raw text
+        embeddings = embed_model.encode(paper_texts_raw, convert_to_tensor=True)
 
         # -------------------------
-        # Separate Tabs
+        # Tabs for separate sections
         # -------------------------
         tab1, tab2, tab3 = st.tabs(["🔑 Keywords", "📝 Summaries", "📚 Related Papers"])
 
+        # -------------------------
+        # Keywords Tab
+        # -------------------------
         with tab1:
             st.header("Extracted Keywords")
-            for i, text in enumerate(paper_texts):
+            for i, text in enumerate(paper_texts_clean):
                 keywords = extract_keywords(text, top_n=num_keywords)
                 st.subheader(paper_names[i])
                 st.write(", ".join(keywords))
 
+        # -------------------------
+        # Summaries Tab
+        # -------------------------
         with tab2:
             st.header("Summaries")
-            for i, text in enumerate(paper_texts):
+            for i, text in enumerate(paper_texts_raw):
                 summary = summarize_text(text, max_len=summary_length)
                 st.subheader(paper_names[i])
                 st.write(summary)
 
+        # -------------------------
+        # Related Papers Tab
+        # -------------------------
         with tab3:
             st.header("Related Paper Suggestions")
             if len(uploaded_files) < 2:
