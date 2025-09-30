@@ -56,7 +56,7 @@ def summarize_text(text, max_len=150):
                 do_sample=False
             )[0]['summary_text']
             summaries.append(summary)
-        except Exception as e:
+        except Exception:
             summaries.append("")
     return " ".join(summaries)
 
@@ -73,7 +73,7 @@ st.set_page_config(page_title="Research Paper Assistant", layout="wide")
 st.title("📄 Research Paper Assistant Dashboard")
 st.info("Upload multiple PDFs to extract keywords, summarize, and find related papers.")
 
-# Main page uploader (not sidebar)
+# Main page uploader
 uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
 
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
@@ -91,30 +91,40 @@ if uploaded_files:
             clean_text = preprocess_text(text)
             paper_texts.append(clean_text)
             paper_names.append(file.name)
-            st.write(f"✅ Extracted text from {file.name} ({len(clean_text)} chars)")
 
         embeddings = embed_model.encode(paper_texts, convert_to_tensor=True)
-        st.write("📊 Embeddings shape:", embeddings.shape)
 
+        # -------------------------
+        # Show per-paper keywords & summary
+        # -------------------------
         for i, text in enumerate(paper_texts):
             st.markdown(f"## 📄 {paper_names[i]}")
             
-            with st.expander("Show extracted text"):
+            with st.expander("📖 Show Extracted Text"):
                 st.write(text[:5000])  # show first 5000 chars
             
-            # Display keywords
+            # Keywords
+            st.subheader("🔑 Extracted Keywords")
             keywords = extract_keywords(text, top_n=num_keywords)
-            st.markdown("**Keywords:**")
             st.write(", ".join(keywords))
             
-            # Display summary
+            # Summary
+            st.subheader("📝 Summary")
             summary = summarize_text(text, max_len=summary_length)
-            st.markdown("**Summary:**")
             st.write(summary)
             
-            # Display related papers
-            related = find_related_papers(i, embeddings, paper_names)
-            st.markdown("**Related Papers:**")
-            st.write(", ".join(related))
-            
             st.markdown("---")
+
+        # -------------------------
+        # Separate Related Paper Suggestions
+        # -------------------------
+        st.markdown("## 📚 Related Paper Suggestions")
+
+        if len(uploaded_files) < 2:
+            st.warning("⚠️ Upload at least 2 PDFs to see related paper suggestions.")
+        else:
+            for i, name in enumerate(paper_names):
+                related = find_related_papers(i, embeddings, paper_names)
+                st.markdown(f"**{name} → Related Papers:**")
+                st.write(", ".join(related))
+                st.markdown("---")
