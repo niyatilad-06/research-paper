@@ -44,7 +44,21 @@ def load_models():
 summarizer, embed_model = load_models()
 
 def summarize_text(text, max_len=150):
-    return summarizer(text, max_length=max_len, min_length=50, do_sample=False)[0]['summary_text']
+    # Split text into smaller chunks so summarizer won't fail
+    chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
+    summaries = []
+    for chunk in chunks:
+        try:
+            summary = summarizer(
+                chunk,
+                max_length=max_len,
+                min_length=50,
+                do_sample=False
+            )[0]['summary_text']
+            summaries.append(summary)
+        except Exception as e:
+            summaries.append("")
+    return " ".join(summaries)
 
 def find_related_papers(paper_idx, embeddings, paper_names, top_n=3):
     similarities = util.pytorch_cos_sim(embeddings[paper_idx], embeddings)[0]
@@ -56,14 +70,14 @@ def find_related_papers(paper_idx, embeddings, paper_names, top_n=3):
 # -------------------------
 st.set_page_config(page_title="Research Paper Assistant", layout="wide")
 
-st.sidebar.title("📄 Upload & Settings")
-uploaded_files = st.sidebar.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
+st.title("📄 Research Paper Assistant Dashboard")
+st.info("Upload multiple PDFs to extract keywords, summarize, and find related papers.")
+
+# Main page uploader (not sidebar)
+uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
 
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
 summary_length = st.sidebar.slider("Summary max length", 50, 300, 150)
-
-st.title("📄 Research Paper Assistant Dashboard")
-st.info("Upload multiple PDFs to extract keywords, summarize, and find related papers.")
 
 if uploaded_files:
     st.success(f"{len(uploaded_files)} files uploaded.")
@@ -71,14 +85,17 @@ if uploaded_files:
     if st.button("Process PDFs"):
         paper_texts = []
         paper_names = []
+
         for file in uploaded_files:
             text = extract_text_from_pdf(file)
             clean_text = preprocess_text(text)
             paper_texts.append(clean_text)
             paper_names.append(file.name)
-        
+            st.write(f"✅ Extracted text from {file.name} ({len(clean_text)} chars)")
+
         embeddings = embed_model.encode(paper_texts, convert_to_tensor=True)
-        
+        st.write("📊 Embeddings shape:", embeddings.shape)
+
         for i, text in enumerate(paper_texts):
             st.markdown(f"## 📄 {paper_names[i]}")
             
