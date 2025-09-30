@@ -92,33 +92,30 @@ if uploaded_files:
         embeddings = embed_model.encode(paper_texts, convert_to_tensor=True)
 
         # -------------------------
-        # SECTION 1: Keywords
+        # Separate Tabs
         # -------------------------
-        st.header("🔑 Extracted Keywords")
-        for i, text in enumerate(paper_texts):
-            keywords = extract_keywords(text, top_n=num_keywords)
-            st.subheader(paper_names[i])
-            st.write(", ".join(keywords))
-        st.markdown("---")
+        tab1, tab2, tab3 = st.tabs(["🔑 Keywords", "📝 Summaries", "📚 Related Papers"])
 
-        # -------------------------
-        # SECTION 2: Summaries
-        # -------------------------
-        st.header("📝 Summaries")
-        for i, text in enumerate(paper_texts):
-            summary = summarize_text(text, max_len=summary_length)
-            st.subheader(paper_names[i])
-            st.write(summary)
-        st.markdown("---")
+        with tab1:
+            st.header("Extracted Keywords")
+            for i, text in enumerate(paper_texts):
+                keywords = extract_keywords(text, top_n=num_keywords)
+                st.subheader(paper_names[i])
+                st.write(", ".join(keywords))
 
-        # -------------------------
-        # SECTION 3: Related Papers
-        # -------------------------
-        st.header("📚 Related Paper Suggestions")
-        if len(uploaded_files) < 2:
-            st.warning("⚠️ Upload at least 2 PDFs to see related paper suggestions.")
-        else:
-            for i, name in enumerate(paper_names):
-                related = find_related_papers(i, embeddings, paper_names)
-                st.subheader(name)
-                st.write(", ".join(related))
+        with tab2:
+            st.header("Summaries")
+            for i, text in enumerate(paper_texts):
+                summary = summarize_text(text, max_len=summary_length)
+                st.subheader(paper_names[i])
+                st.write(summary)
+
+        with tab3:
+            st.header("Related Paper Suggestions")
+            if len(uploaded_files) < 2:
+                st.warning("⚠️ Upload at least 2 PDFs to see related paper suggestions.")
+            else:
+                for i, name in enumerate(paper_names):
+                    related = find_related_papers(i, embeddings, paper_names)
+                    st.subheader(name)
+                    st.write(", ".join(related))
