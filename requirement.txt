@@ -1,0 +1,6 @@
+streamlit
+pymupdf
+nltk
+rake-nltk
+transformers
+sentence-transformers
