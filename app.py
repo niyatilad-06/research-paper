@@ -3,7 +3,6 @@ import streamlit as st
 import fitz  # PyMuPDF
 import re
 import nltk
-from nltk.corpus import stopwords
 from rake_nltk import Rake
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
@@ -12,8 +11,6 @@ from sentence_transformers import SentenceTransformer, util
 # Setup
 # -------------------------
 nltk.download('punkt')
-nltk.download('stopwords')
-stop_words = set(stopwords.words('english'))
 
 st.set_page_config(page_title="Research Paper Assistant", layout="wide")
 st.title("📄 Research Paper Assistant Dashboard")
@@ -30,27 +27,20 @@ def extract_text_from_pdf(file):
         text += page.get_text()
     return text
 
-def preprocess_text(text):
-    text = text.lower()
+def preprocess_for_keywords(text):
     text = re.sub(r'\s+', ' ', text)
-    # Keep numbers and basic punctuation
+    # Remove excessive symbols but keep numbers and domain terms
     text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
-    words = text.split()
-    words = [word for word in words if word not in stop_words]
-    return ' '.join(words)
+    return text
 
 def extract_keywords(text, top_n=10):
     r = Rake()
     r.extract_keywords_from_text(text)
     return r.get_ranked_phrases()[:top_n]
 
-@st.cache_resource
-def load_models():
-    summarizer_model = pipeline("summarization", model="t5-small")
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    return summarizer_model, embedding_model
-
-summarizer, embed_model = load_models()
+# Load models (no caching, to reflect changes immediately)
+summarizer = pipeline("summarization", model="t5-small", tokenizer="t5-small")
+embedding_model = SentenceTransformer('all-mpnet-base-v2')  # better embeddings
 
 def summarize_text(text, max_len=150):
     sentences = nltk.sent_tokenize(text)
@@ -97,20 +87,18 @@ if uploaded_files:
         for file in uploaded_files:
             text = extract_text_from_pdf(file)
             paper_texts_raw.append(text)
-            paper_texts_clean.append(preprocess_text(text))
+            paper_texts_clean.append(preprocess_for_keywords(text))
             paper_names.append(file.name)
 
-        # Generate embeddings for related papers using raw text
-        embeddings = embed_model.encode(paper_texts_raw, convert_to_tensor=True)
+        # Compute embeddings for related papers using raw text
+        embeddings = embedding_model.encode(paper_texts_raw, convert_to_tensor=True)
 
         # -------------------------
         # Tabs for separate sections
         # -------------------------
         tab1, tab2, tab3 = st.tabs(["🔑 Keywords", "📝 Summaries", "📚 Related Papers"])
 
-        # -------------------------
         # Keywords Tab
-        # -------------------------
         with tab1:
             st.header("Extracted Keywords")
             for i, text in enumerate(paper_texts_clean):
@@ -118,9 +106,7 @@ if uploaded_files:
                 st.subheader(paper_names[i])
                 st.write(", ".join(keywords))
 
-        # -------------------------
         # Summaries Tab
-        # -------------------------
         with tab2:
             st.header("Summaries")
             for i, text in enumerate(paper_texts_raw):
@@ -128,9 +114,7 @@ if uploaded_files:
                 st.subheader(paper_names[i])
                 st.write(summary)
 
-        # -------------------------
         # Related Papers Tab
-        # -------------------------
         with tab3:
             st.header("Related Paper Suggestions")
             if len(uploaded_files) < 2:
