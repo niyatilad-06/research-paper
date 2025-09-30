@@ -1,15 +1,19 @@
+# -------------------------
 # app.py
-import re
-from nltk.corpus import stopwords
+# -------------------------
 import streamlit as st
 import fitz  # PyMuPDF
+import re
 import nltk
 from rake_nltk import Rake
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
-# Download stopwords
+# -------------------------
+# Download NLTK stopwords at runtime
+# -------------------------
 nltk.download('stopwords')
+from nltk.corpus import stopwords
 stop_words = set(stopwords.words('english'))
 
 # -------------------------
