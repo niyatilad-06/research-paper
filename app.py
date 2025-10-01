@@ -21,6 +21,7 @@ def extract_text_from_pdf(file):
         text += page.get_text("text")
     return text
 
+
 def extract_keywords(text, num_keywords=10):
     """Extract keywords using RAKE."""
     rake = Rake(stopwords=stop_words)
@@ -28,18 +29,32 @@ def extract_keywords(text, num_keywords=10):
     keywords = rake.get_ranked_phrases()[:num_keywords]
     return keywords
 
-def summarize_text(text, max_length=100, min_length=30):
-    """Summarize text using HuggingFace pipeline."""
+
+def chunk_text(text, chunk_size=800):
+    """Split text into smaller chunks for summarization."""
+    words = text.split()
+    for i in range(0, len(words), chunk_size):
+        yield " ".join(words[i:i + chunk_size])
+
+
+def summarize_text(text, max_length=120, min_length=40):
+    """Summarize text in chunks for long PDFs."""
     summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
-    text = text[:2000]  # Limit for performance
-    summary = summarizer(text, max_length=max_length, min_length=min_length, do_sample=False)
-    return summary[0]['summary_text']
+    chunks = list(chunk_text(text))
+    summaries = []
+    for chunk in chunks[:3]:  # only summarize first 3 chunks for speed
+        summary = summarizer(
+            chunk, max_length=max_length, min_length=min_length, do_sample=False
+        )[0]['summary_text']
+        summaries.append(summary)
+    return " ".join(summaries)
+
 
 def find_related_papers(papers, top_k=2):
-    """Find related papers using semantic similarity."""
+    """Find related papers using semantic similarity of summaries."""
     model = SentenceTransformer("all-MiniLM-L6-v2")
     embeddings = model.encode([p["summary"] for p in papers], convert_to_tensor=True)
-    
+
     related_results = []
     for i in range(len(papers)):
         scores = util.cos_sim(embeddings[i], embeddings)[0]
@@ -47,7 +62,7 @@ def find_related_papers(papers, top_k=2):
         top_indices = scores.topk(top_k).indices.tolist()
         related = [(papers[j]["title"], float(scores[j])) for j in top_indices]
         related_results.append({"paper": papers[i]["title"], "related": related})
-    
+
     return related_results
 
 # -------------------------
@@ -60,11 +75,13 @@ st.markdown("Upload PDFs to extract **keywords**, **summarize**, and **suggest r
 
 # Sidebar options
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
-summary_length = st.sidebar.slider("Summary max length", 50, 200, 100)
+summary_length = st.sidebar.slider("Summary max length", 50, 200, 120)
 
 # Upload PDFs
 st.header("📂 Upload PDFs")
-uploaded_files = st.file_uploader("Upload one or more PDF files", type="pdf", accept_multiple_files=True)
+uploaded_files = st.file_uploader(
+    "Upload one or more PDF files", type="pdf", accept_multiple_files=True
+)
 
 papers = []
 
