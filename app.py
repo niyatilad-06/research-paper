@@ -6,7 +6,8 @@ from rake_nltk import Rake
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
-# Download stopwords (run once)
+# Download resources
+nltk.download('punkt')
 nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
@@ -26,27 +27,41 @@ def extract_keywords(text, num_keywords=10):
     """Extract keywords using RAKE."""
     rake = Rake(stopwords=stop_words)
     rake.extract_keywords_from_text(text)
-    keywords = rake.get_ranked_phrases()[:num_keywords]
-    return keywords
+    return rake.get_ranked_phrases()[:num_keywords]
 
 
-def chunk_text(text, chunk_size=800):
-    """Split text into smaller chunks for summarization."""
-    words = text.split()
-    for i in range(0, len(words), chunk_size):
-        yield " ".join(words[i:i + chunk_size])
+def split_into_chunks(text, max_words=300):
+    """Split text into chunks of sentences (max_words per chunk)."""
+    sentences = nltk.sent_tokenize(text)
+    chunks, current_chunk, words = [], [], 0
+    for sent in sentences:
+        word_count = len(sent.split())
+        if words + word_count > max_words:
+            chunks.append(" ".join(current_chunk))
+            current_chunk, words = [], 0
+        current_chunk.append(sent)
+        words += word_count
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+    return chunks
 
 
-def summarize_text(text, max_length=120, min_length=40):
-    """Summarize text in chunks for long PDFs."""
-    summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
-    chunks = list(chunk_text(text))
+def summarize_text(text, max_length=150, min_length=50):
+    """Summarize long text by chunking."""
+    summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+    chunks = split_into_chunks(text, max_words=300)
     summaries = []
-    for chunk in chunks[:3]:  # only summarize first 3 chunks for speed
-        summary = summarizer(
-            chunk, max_length=max_length, min_length=min_length, do_sample=False
-        )[0]['summary_text']
-        summaries.append(summary)
+    for chunk in chunks[:5]:  # only first 5 chunks for speed
+        try:
+            summary = summarizer(
+                chunk,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=False
+            )[0]['summary_text']
+            summaries.append(summary)
+        except Exception:
+            continue
     return " ".join(summaries)
 
 
@@ -65,17 +80,18 @@ def find_related_papers(papers, top_k=2):
 
     return related_results
 
+
 # -------------------------
 # Streamlit UI
 # -------------------------
 st.set_page_config(page_title="Research Paper Assistant", layout="wide")
 
 st.title("📑 Research Paper Assistant Dashboard")
-st.markdown("Upload PDFs to extract **keywords**, **summarize**, and **suggest related papers**.")
+st.markdown("Upload PDFs to extract **keywords**, generate **summaries**, and suggest **related papers**.")
 
 # Sidebar options
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
-summary_length = st.sidebar.slider("Summary max length", 50, 200, 120)
+summary_length = st.sidebar.slider("Summary max length", 100, 300, 150)
 
 # Upload PDFs
 st.header("📂 Upload PDFs")
@@ -90,20 +106,20 @@ if uploaded_files:
         st.success(f"Uploaded: {uploaded_file.name}")
         text = extract_text_from_pdf(uploaded_file)
 
-        # Extract Keywords
-        st.subheader(f"🔑 Extract Keywords - {uploaded_file.name}")
+        # Keywords
+        st.subheader(f"🔑 Keywords - {uploaded_file.name}")
         keywords = extract_keywords(text, num_keywords=num_keywords)
         st.write(", ".join(keywords))
 
-        # Summarize PDF
-        st.subheader(f"📝 Summarize PDF - {uploaded_file.name}")
+        # Summary
+        st.subheader(f"📝 Summary - {uploaded_file.name}")
         summary = summarize_text(text, max_length=summary_length)
-        st.write(summary)
+        st.write(summary if summary else "⚠️ Could not generate summary.")
 
         # Store for related paper suggestion
         papers.append({"title": uploaded_file.name, "summary": summary})
 
-    # Suggest Related Papers
+    # Related Papers Section
     if len(papers) > 1:
         st.header("🔍 Suggested Related Papers")
         related = find_related_papers(papers, top_k=2)
