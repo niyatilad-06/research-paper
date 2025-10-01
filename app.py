@@ -1,5 +1,5 @@
 import streamlit as st
-import fitz  # PyMuPDF
+import pymupdf as fitz
 import nltk
 from nltk.corpus import stopwords
 from rake_nltk import Rake
@@ -166,4 +166,5 @@ if uploaded_files:
             st.markdown(f"**{item['paper']}** is related to:")
             for r in item['related']:
                 st.write(f"- {r[0]} (similarity: {r[1]:.2f})")
+
 
