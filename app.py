@@ -29,7 +29,6 @@ def extract_text_from_pdf(file):
 
 def preprocess_for_keywords(text):
     text = re.sub(r'\s+', ' ', text)
-    # Remove excessive symbols but keep numbers and domain terms
     text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
     return text
 
@@ -38,13 +37,13 @@ def extract_keywords(text, top_n=10):
     r.extract_keywords_from_text(text)
     return r.get_ranked_phrases()[:top_n]
 
-# Load models (no caching, to reflect changes immediately)
+# Models
 summarizer = pipeline("summarization", model="t5-small", tokenizer="t5-small")
-embedding_model = SentenceTransformer('all-mpnet-base-v2')  # better embeddings
+embedding_model = SentenceTransformer('all-mpnet-base-v2')
 
 def summarize_text(text, max_len=150):
     sentences = nltk.sent_tokenize(text)
-    chunks, chunk_size = [], 20  # 20 sentences per chunk
+    chunks, chunk_size = [], 20
     for i in range(0, len(sentences), chunk_size):
         chunk = " ".join(sentences[i:i+chunk_size])
         chunks.append(chunk)
@@ -68,19 +67,20 @@ def find_related_papers(paper_idx, embeddings, paper_names, top_n=3):
     return [paper_names[i] for i in related_idx]
 
 # -------------------------
-# Sidebar controls
+# Sidebar Controls
 # -------------------------
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
 summary_length = st.sidebar.slider("Summary max length", 50, 300, 150)
 
 # -------------------------
-# File uploader
+# Section 1: Upload PDFs
 # -------------------------
-uploaded_files = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=["pdf"])
+st.header("📂 Upload PDFs")
+uploaded_files = st.file_uploader("Upload one or more PDF files", accept_multiple_files=True, type=["pdf"])
 
 if uploaded_files:
     st.success(f"{len(uploaded_files)} file(s) uploaded.")
-    
+
     if st.button("Process PDFs"):
         paper_texts_raw, paper_texts_clean, paper_names = [], [], []
 
@@ -90,37 +90,43 @@ if uploaded_files:
             paper_texts_clean.append(preprocess_for_keywords(text))
             paper_names.append(file.name)
 
-        # Compute embeddings for related papers using raw text
+        # Compute embeddings for related papers
         embeddings = embedding_model.encode(paper_texts_raw, convert_to_tensor=True)
 
         # -------------------------
-        # Tabs for separate sections
+        # Section 2: Extract Keywords
         # -------------------------
-        tab1, tab2, tab3 = st.tabs(["🔑 Keywords", "📝 Summaries", "📚 Related Papers"])
+        st.header("🔑 Extract Keywords")
+        for i, text in enumerate(paper_texts_clean):
+            keywords = extract_keywords(text, top_n=num_keywords)
+            st.subheader(paper_names[i])
+            st.write(", ".join(keywords))
 
-        # Keywords Tab
-        with tab1:
-            st.header("Extracted Keywords")
-            for i, text in enumerate(paper_texts_clean):
-                keywords = extract_keywords(text, top_n=num_keywords)
-                st.subheader(paper_names[i])
-                st.write(", ".join(keywords))
+        # -------------------------
+        # Section 3: Summarize PDF
+        # -------------------------
+        st.header("📝 Summarize PDF")
+        for i, text in enumerate(paper_texts_raw):
+            summary = summarize_text(text, max_len=summary_length)
+            st.subheader(paper_names[i])
+            st.write(summary)
 
-        # Summaries Tab
-        with tab2:
-            st.header("Summaries")
-            for i, text in enumerate(paper_texts_raw):
-                summary = summarize_text(text, max_len=summary_length)
-                st.subheader(paper_names[i])
-                st.write(summary)
+        # -------------------------
+        # Section 4: Add Multiple PDFs
+        # -------------------------
+        st.header("📂 Add Multiple PDFs")
+        st.info("You can upload multiple PDFs above. This section highlights that multiple PDFs can be analyzed together.")
 
-        # Related Papers Tab
-        with tab3:
-            st.header("Related Paper Suggestions")
-            if len(uploaded_files) < 2:
-                st.warning("⚠️ Upload at least 2 PDFs to see related paper suggestions.")
-            else:
-                for i, name in enumerate(paper_names):
-                    related = find_related_papers(i, embeddings, paper_names)
-                    st.subheader(name)
-                    st.write(", ".join(related))
+        # -------------------------
+        # Section 5: Suggest Related Research Papers
+        # -------------------------
+        st.header("📚 Suggest Related Research Papers")
+        if len(uploaded_files) < 2:
+            st.warning("⚠️ Upload at least 2 PDFs to see related paper suggestions.")
+        else:
+            for i, name in enumerate(paper_names):
+                related = find_related_papers(i, embeddings, paper_names)
+                st.subheader(name)
+                st.write(", ".join(related))
+else:
+    st.info("Please upload at least one PDF to begin.")
