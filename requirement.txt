@@ -1,7 +1,7 @@
-streamlit==1.38.0
-pymupdf==1.24.9
-nltk==3.9.1
-rake-nltk==1.0.6
-transformers==4.44.2
-sentence-transformers==3.0.1
-torch==2.4.1
+streamlit
+pymupdf
+nltk
+rake-nltk
+transformers
+sentence-transformers
+torch
