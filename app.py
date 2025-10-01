@@ -24,31 +24,32 @@ def extract_text_from_pdf(file):
     doc = fitz.open(stream=file.read(), filetype="pdf")
     text = ""
     for page in doc:
-        text += page.get_text()
+        text += page.get_text("text")
     return text
 
 def preprocess_for_keywords(text):
+    # Keep text more natural (don’t over-clean)
     text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
     return text
 
 def extract_keywords(text, top_n=10):
     r = Rake()
     r.extract_keywords_from_text(text)
-    return r.get_ranked_phrases()[:top_n]
+    ranked = r.get_ranked_phrases()
+    return ranked[:top_n]
 
 # Models
-summarizer = pipeline("summarization", model="t5-small", tokenizer="t5-small")
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")  # better summarizer
 embedding_model = SentenceTransformer('all-mpnet-base-v2')
 
 def summarize_text(text, max_len=150):
     sentences = nltk.sent_tokenize(text)
-    chunks, chunk_size = [], 20
+    chunks, chunk_size = [], 10  # fewer sentences per chunk for better summaries
     for i in range(0, len(sentences), chunk_size):
         chunk = " ".join(sentences[i:i+chunk_size])
         chunks.append(chunk)
     summaries = []
-    for chunk in chunks:
+    for chunk in chunks[:3]:  # limit to 3 chunks to save time
         try:
             summary = summarizer(
                 chunk,
@@ -58,8 +59,8 @@ def summarize_text(text, max_len=150):
             )[0]['summary_text']
             summaries.append(summary)
         except Exception:
-            summaries.append("")
-    return " ".join(summaries)
+            continue
+    return " ".join(summaries) if summaries else "Summary not available."
 
 def find_related_papers(paper_idx, embeddings, paper_names, top_n=3):
     similarities = util.pytorch_cos_sim(embeddings[paper_idx], embeddings)[0]
@@ -79,7 +80,7 @@ st.header("📂 Upload PDFs")
 uploaded_files = st.file_uploader("Upload one or more PDF files", accept_multiple_files=True, type=["pdf"])
 
 if uploaded_files:
-    st.success(f"{len(uploaded_files)} file(s) uploaded.")
+    st.success(f"{len(uploaded_files)} file(s) uploaded. Click 'Process PDFs' below to analyze.")
 
     if st.button("Process PDFs"):
         paper_texts_raw, paper_texts_clean, paper_names = [], [], []
@@ -99,7 +100,7 @@ if uploaded_files:
         st.header("🔑 Extract Keywords")
         for i, text in enumerate(paper_texts_clean):
             keywords = extract_keywords(text, top_n=num_keywords)
-            st.subheader(paper_names[i])
+            st.subheader(f"📘 {paper_names[i]}")
             st.write(", ".join(keywords))
 
         # -------------------------
@@ -107,15 +108,15 @@ if uploaded_files:
         # -------------------------
         st.header("📝 Summarize PDF")
         for i, text in enumerate(paper_texts_raw):
+            st.subheader(f"📘 {paper_names[i]}")
             summary = summarize_text(text, max_len=summary_length)
-            st.subheader(paper_names[i])
             st.write(summary)
 
         # -------------------------
         # Section 4: Add Multiple PDFs
         # -------------------------
         st.header("📂 Add Multiple PDFs")
-        st.info("You can upload multiple PDFs above. This section highlights that multiple PDFs can be analyzed together.")
+        st.success("✅ You can upload multiple PDFs above. All files will be analyzed together.")
 
         # -------------------------
         # Section 5: Suggest Related Research Papers
@@ -126,7 +127,7 @@ if uploaded_files:
         else:
             for i, name in enumerate(paper_names):
                 related = find_related_papers(i, embeddings, paper_names)
-                st.subheader(name)
+                st.subheader(f"📘 {name}")
                 st.write(", ".join(related))
 else:
     st.info("Please upload at least one PDF to begin.")
