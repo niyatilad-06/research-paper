@@ -7,7 +7,7 @@ from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
 # -------------------------
-# Download NLTK resources safely
+# Download NLTK resources
 # -------------------------
 @st.cache_resource
 def download_nltk_resources():
@@ -24,7 +24,7 @@ download_nltk_resources()
 stop_words = set(stopwords.words('english'))
 
 # -------------------------
-# Load models (cached for speed)
+# Load models
 # -------------------------
 @st.cache_resource
 def load_summarizer():
@@ -42,20 +42,28 @@ sentence_model = load_sentence_model()
 # -------------------------
 def extract_text_from_pdf(file):
     """Extract text from uploaded PDF file."""
-    doc = fitz.open(stream=file.read(), filetype="pdf")
-    text = ""
-    for page in doc:
-        text += page.get_text("text")
-    return text
+    try:
+        doc = fitz.open(stream=file.read(), filetype="pdf")
+        text = ""
+        for page in doc:
+            text += page.get_text("text")
+        return text
+    except Exception as e:
+        st.error(f"❌ Error reading PDF: {e}")
+        return ""
 
 def extract_keywords(text, num_keywords=10):
     """Extract keywords using RAKE."""
-    rake = Rake(stopwords=stop_words)
-    rake.extract_keywords_from_text(text)
-    return rake.get_ranked_phrases()[:num_keywords]
+    try:
+        rake = Rake(stopwords=stop_words)
+        rake.extract_keywords_from_text(text)
+        return rake.get_ranked_phrases()[:num_keywords]
+    except Exception as e:
+        st.error(f"❌ Keyword extraction failed: {e}")
+        return []
 
 def split_into_chunks(text, max_words=300):
-    """Split text into chunks of sentences (max_words per chunk)."""
+    """Split text into chunks for summarization."""
     sentences = nltk.sent_tokenize(text)
     chunks, current_chunk, words = [], [], 0
     for sent in sentences:
@@ -71,10 +79,10 @@ def split_into_chunks(text, max_words=300):
 
 def summarize_text(text, max_length=150, min_length=50):
     """Summarize long text by chunking."""
-    chunks = split_into_chunks(text, max_words=400)
-    summaries = []
-    for chunk in chunks[:10]:  # first 10 chunks for speed
-        try:
+    try:
+        chunks = split_into_chunks(text, max_words=400)
+        summaries = []
+        for chunk in chunks[:10]:  # limit for performance
             summary = summarizer(
                 chunk,
                 max_length=max_length,
@@ -82,21 +90,26 @@ def summarize_text(text, max_length=150, min_length=50):
                 do_sample=False
             )[0]['summary_text']
             summaries.append(summary)
-        except Exception:
-            continue
-    return " ".join(summaries)
+        return " ".join(summaries)
+    except Exception as e:
+        st.error(f"❌ Summarization failed: {e}")
+        return ""
 
 def find_related_papers(papers, top_k=2):
     """Find related papers using semantic similarity of summaries."""
-    embeddings = sentence_model.encode([p["summary"] for p in papers], convert_to_tensor=True)
-    related_results = []
-    for i in range(len(papers)):
-        scores = util.cos_sim(embeddings[i], embeddings)[0]
-        scores[i] = -1  # exclude self
-        top_indices = scores.topk(top_k).indices.tolist()
-        related = [(papers[j]["title"], float(scores[j])) for j in top_indices]
-        related_results.append({"paper": papers[i]["title"], "related": related})
-    return related_results
+    try:
+        embeddings = sentence_model.encode([p["summary"] for p in papers], convert_to_tensor=True)
+        related_results = []
+        for i in range(len(papers)):
+            scores = util.cos_sim(embeddings[i], embeddings)[0]
+            scores[i] = -1  # exclude self
+            top_indices = scores.topk(top_k).indices.tolist()
+            related = [(papers[j]["title"], float(scores[j])) for j in top_indices]
+            related_results.append({"paper": papers[i]["title"], "related": related})
+        return related_results
+    except Exception as e:
+        st.error(f"❌ Related paper suggestion failed: {e}")
+        return []
 
 # -------------------------
 # Streamlit UI
@@ -120,26 +133,32 @@ papers = []
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
-        st.success(f"Uploaded: {uploaded_file.name}")
-        text = extract_text_from_pdf(uploaded_file)
+        st.success(f"✅ Uploaded: {uploaded_file.name}")
 
-        # Keywords
-        keywords = extract_keywords(text, num_keywords=num_keywords)
+        with st.spinner("🔍 Extracting text from PDF..."):
+            text = extract_text_from_pdf(uploaded_file)
 
-        # Summary
-        summary = summarize_text(text, max_length=summary_length)
+        if not text.strip():
+            st.error("⚠️ No extractable text found in this PDF.")
+            continue
 
-        # Show results neatly
-        st.markdown(f"### 📄 {uploaded_file.name}")
+        with st.expander("📄 Preview extracted text (first 1000 characters)"):
+            st.write(text[:1000] + "..." if len(text) > 1000 else text)
+
+        with st.spinner("💡 Extracting keywords..."):
+            keywords = extract_keywords(text, num_keywords=num_keywords)
+
+        with st.spinner("✍️ Generating summary..."):
+            summary = summarize_text(text, max_length=summary_length)
+
+        st.markdown(f"### 📘 {uploaded_file.name}")
         st.subheader("📝 Summary")
         st.write(summary if summary else "⚠️ Could not generate summary.")
         st.subheader("🔑 Keywords")
-        st.write(", ".join(keywords))
+        st.write(", ".join(keywords) if keywords else "⚠️ No keywords found.")
 
-        # Store for related paper suggestion
         papers.append({"title": uploaded_file.name, "summary": summary})
 
-    # Related Papers Section
     if len(papers) > 1:
         st.header("🔍 Suggested Related Papers")
         related = find_related_papers(papers, top_k=2)
