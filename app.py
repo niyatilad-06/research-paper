@@ -7,10 +7,20 @@ from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
 # -------------------------
-# Download NLTK resources
+# Download NLTK resources safely
 # -------------------------
-nltk.download('punkt')
-nltk.download('stopwords')
+@st.cache_resource
+def download_nltk_resources():
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt')
+    try:
+        nltk.data.find('corpora/stopwords')
+    except LookupError:
+        nltk.download('stopwords')
+
+download_nltk_resources()
 stop_words = set(stopwords.words('english'))
 
 # -------------------------
