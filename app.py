@@ -49,7 +49,7 @@ def extract_text_from_pdf(file):
             text += page.get_text("text")
         return text
     except Exception as e:
-        st.error(f"❌ Error reading PDF: {e}")
+        st.error(f"Error reading PDF: {e}")
         return ""
 
 def extract_keywords(text, num_keywords=10):
@@ -59,7 +59,7 @@ def extract_keywords(text, num_keywords=10):
         rake.extract_keywords_from_text(text)
         return rake.get_ranked_phrases()[:num_keywords]
     except Exception as e:
-        st.error(f"❌ Keyword extraction failed: {e}")
+        st.error(f"Keyword extraction failed: {e}")
         return []
 
 def split_into_chunks(text, max_words=300):
@@ -92,7 +92,7 @@ def summarize_text(text, max_length=150, min_length=50):
             summaries.append(summary)
         return " ".join(summaries)
     except Exception as e:
-        st.error(f"❌ Summarization failed: {e}")
+        st.error(f"Summarization failed: {e}")
         return ""
 
 def find_related_papers(papers, top_k=2):
@@ -108,14 +108,14 @@ def find_related_papers(papers, top_k=2):
             related_results.append({"paper": papers[i]["title"], "related": related})
         return related_results
     except Exception as e:
-        st.error(f"❌ Related paper suggestion failed: {e}")
+        st.error(f"Related paper suggestion failed: {e}")
         return []
 
 # -------------------------
 # Streamlit UI
 # -------------------------
 st.set_page_config(page_title="Research Paper Assistant", layout="wide")
-st.title("📑 Research Paper Assistant")
+st.title("Research Paper Assistant")
 st.markdown(
     "Upload PDFs to extract **keywords**, generate **summaries**, and suggest **related papers**."
 )
@@ -133,29 +133,29 @@ papers = []
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
-        st.success(f"✅ Uploaded: {uploaded_file.name}")
+        st.success(f"Uploaded: {uploaded_file.name}")
 
         with st.spinner("🔍 Extracting text from PDF..."):
             text = extract_text_from_pdf(uploaded_file)
 
         if not text.strip():
-            st.error("⚠️ No extractable text found in this PDF.")
+            st.error("No extractable text found in this PDF.")
             continue
 
-        with st.expander("📄 Preview extracted text (first 1000 characters)"):
+        with st.expander("Preview extracted text (first 1000 characters)"):
             st.write(text[:1000] + "..." if len(text) > 1000 else text)
 
-        with st.spinner("💡 Extracting keywords..."):
+        with st.spinner("Extracting keywords..."):
             keywords = extract_keywords(text, num_keywords=num_keywords)
 
-        with st.spinner("✍️ Generating summary..."):
+        with st.spinner("Generating summary..."):
             summary = summarize_text(text, max_length=summary_length)
 
-        st.markdown(f"### 📘 {uploaded_file.name}")
-        st.subheader("📝 Summary")
-        st.write(summary if summary else "⚠️ Could not generate summary.")
-        st.subheader("🔑 Keywords")
-        st.write(", ".join(keywords) if keywords else "⚠️ No keywords found.")
+        st.markdown(f"### {uploaded_file.name}")
+        st.subheader("Summary")
+        st.write(summary if summary else "Could not generate summary.")
+        st.subheader("Keywords")
+        st.write(", ".join(keywords) if keywords else "No keywords found.")
 
         papers.append({"title": uploaded_file.name, "summary": summary})
 
@@ -166,3 +166,4 @@ if uploaded_files:
             st.markdown(f"**{item['paper']}** is related to:")
             for r in item['related']:
                 st.write(f"- {r[0]} (similarity: {r[1]:.2f})")
+
