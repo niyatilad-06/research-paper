@@ -1,133 +1,96 @@
-# app.py
 import streamlit as st
 import fitz  # PyMuPDF
-import re
 import nltk
+from nltk.corpus import stopwords
 from rake_nltk import Rake
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
-# -------------------------
-# Setup
-# -------------------------
-nltk.download('punkt')
-
-st.set_page_config(page_title="Research Paper Assistant", layout="wide")
-st.title("📄 Research Paper Assistant Dashboard")
-st.info("Upload PDFs to extract keywords, summarize, and find related papers.")
+# Download stopwords (run once)
+nltk.download('stopwords')
+stop_words = set(stopwords.words('english'))
 
 # -------------------------
 # Functions
 # -------------------------
 def extract_text_from_pdf(file):
-    file.seek(0)
+    """Extract text from uploaded PDF file."""
     doc = fitz.open(stream=file.read(), filetype="pdf")
     text = ""
     for page in doc:
         text += page.get_text("text")
     return text
 
-def preprocess_for_keywords(text):
-    # Keep text more natural (don’t over-clean)
-    text = re.sub(r'\s+', ' ', text)
-    return text
+def extract_keywords(text, num_keywords=10):
+    """Extract keywords using RAKE."""
+    rake = Rake(stopwords=stop_words)
+    rake.extract_keywords_from_text(text)
+    keywords = rake.get_ranked_phrases()[:num_keywords]
+    return keywords
 
-def extract_keywords(text, top_n=10):
-    r = Rake()
-    r.extract_keywords_from_text(text)
-    ranked = r.get_ranked_phrases()
-    return ranked[:top_n]
+def summarize_text(text, max_length=100, min_length=30):
+    """Summarize text using HuggingFace pipeline."""
+    summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
+    text = text[:2000]  # Limit for performance
+    summary = summarizer(text, max_length=max_length, min_length=min_length, do_sample=False)
+    return summary[0]['summary_text']
 
-# Models
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")  # better summarizer
-embedding_model = SentenceTransformer('all-mpnet-base-v2')
-
-def summarize_text(text, max_len=150):
-    sentences = nltk.sent_tokenize(text)
-    chunks, chunk_size = [], 10  # fewer sentences per chunk for better summaries
-    for i in range(0, len(sentences), chunk_size):
-        chunk = " ".join(sentences[i:i+chunk_size])
-        chunks.append(chunk)
-    summaries = []
-    for chunk in chunks[:3]:  # limit to 3 chunks to save time
-        try:
-            summary = summarizer(
-                chunk,
-                max_length=max_len,
-                min_length=50,
-                do_sample=False
-            )[0]['summary_text']
-            summaries.append(summary)
-        except Exception:
-            continue
-    return " ".join(summaries) if summaries else "Summary not available."
-
-def find_related_papers(paper_idx, embeddings, paper_names, top_n=3):
-    similarities = util.pytorch_cos_sim(embeddings[paper_idx], embeddings)[0]
-    related_idx = similarities.argsort(descending=True).tolist()[1:top_n+1]
-    return [paper_names[i] for i in related_idx]
+def find_related_papers(papers, top_k=2):
+    """Find related papers using semantic similarity."""
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    embeddings = model.encode([p["summary"] for p in papers], convert_to_tensor=True)
+    
+    related_results = []
+    for i in range(len(papers)):
+        scores = util.cos_sim(embeddings[i], embeddings)[0]
+        scores[i] = -1  # exclude self
+        top_indices = scores.topk(top_k).indices.tolist()
+        related = [(papers[j]["title"], float(scores[j])) for j in top_indices]
+        related_results.append({"paper": papers[i]["title"], "related": related})
+    
+    return related_results
 
 # -------------------------
-# Sidebar Controls
+# Streamlit UI
 # -------------------------
+st.set_page_config(page_title="Research Paper Assistant", layout="wide")
+
+st.title("📑 Research Paper Assistant Dashboard")
+st.markdown("Upload PDFs to extract **keywords**, **summarize**, and **suggest related papers**.")
+
+# Sidebar options
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
-summary_length = st.sidebar.slider("Summary max length", 50, 300, 150)
+summary_length = st.sidebar.slider("Summary max length", 50, 200, 100)
 
-# -------------------------
-# Section 1: Upload PDFs
-# -------------------------
+# Upload PDFs
 st.header("📂 Upload PDFs")
-uploaded_files = st.file_uploader("Upload one or more PDF files", accept_multiple_files=True, type=["pdf"])
+uploaded_files = st.file_uploader("Upload one or more PDF files", type="pdf", accept_multiple_files=True)
+
+papers = []
 
 if uploaded_files:
-    st.success(f"{len(uploaded_files)} file(s) uploaded. Click 'Process PDFs' below to analyze.")
+    for uploaded_file in uploaded_files:
+        st.success(f"Uploaded: {uploaded_file.name}")
+        text = extract_text_from_pdf(uploaded_file)
 
-    if st.button("Process PDFs"):
-        paper_texts_raw, paper_texts_clean, paper_names = [], [], []
+        # Extract Keywords
+        st.subheader(f"🔑 Extract Keywords - {uploaded_file.name}")
+        keywords = extract_keywords(text, num_keywords=num_keywords)
+        st.write(", ".join(keywords))
 
-        for file in uploaded_files:
-            text = extract_text_from_pdf(file)
-            paper_texts_raw.append(text)
-            paper_texts_clean.append(preprocess_for_keywords(text))
-            paper_names.append(file.name)
+        # Summarize PDF
+        st.subheader(f"📝 Summarize PDF - {uploaded_file.name}")
+        summary = summarize_text(text, max_length=summary_length)
+        st.write(summary)
 
-        # Compute embeddings for related papers
-        embeddings = embedding_model.encode(paper_texts_raw, convert_to_tensor=True)
+        # Store for related paper suggestion
+        papers.append({"title": uploaded_file.name, "summary": summary})
 
-        # -------------------------
-        # Section 2: Extract Keywords
-        # -------------------------
-        st.header("🔑 Extract Keywords")
-        for i, text in enumerate(paper_texts_clean):
-            keywords = extract_keywords(text, top_n=num_keywords)
-            st.subheader(f"📘 {paper_names[i]}")
-            st.write(", ".join(keywords))
-
-        # -------------------------
-        # Section 3: Summarize PDF
-        # -------------------------
-        st.header("📝 Summarize PDF")
-        for i, text in enumerate(paper_texts_raw):
-            st.subheader(f"📘 {paper_names[i]}")
-            summary = summarize_text(text, max_len=summary_length)
-            st.write(summary)
-
-        # -------------------------
-        # Section 4: Add Multiple PDFs
-        # -------------------------
-        st.header("📂 Add Multiple PDFs")
-        st.success("✅ You can upload multiple PDFs above. All files will be analyzed together.")
-
-        # -------------------------
-        # Section 5: Suggest Related Research Papers
-        # -------------------------
-        st.header("📚 Suggest Related Research Papers")
-        if len(uploaded_files) < 2:
-            st.warning("⚠️ Upload at least 2 PDFs to see related paper suggestions.")
-        else:
-            for i, name in enumerate(paper_names):
-                related = find_related_papers(i, embeddings, paper_names)
-                st.subheader(f"📘 {name}")
-                st.write(", ".join(related))
-else:
-    st.info("Please upload at least one PDF to begin.")
+    # Suggest Related Papers
+    if len(papers) > 1:
+        st.header("🔍 Suggested Related Papers")
+        related = find_related_papers(papers, top_k=2)
+        for item in related:
+            st.markdown(f"**{item['paper']}** is related to:")
+            for r in item['related']:
+                st.write(f"- {r[0]} (similarity: {r[1]:.2f})")
