@@ -1,14 +1,16 @@
-# Roll back Streamlit to a version known to be stable/less aggressive with rich updates
+# Rolling back Streamlit helps prevent the service from auto-upgrading 'rich'
 streamlit==1.36.0
 PyMuPDF==1.24.9
 nltk==3.8.1
+# ADDED: This package is required by your app.py but was previously missing.
 rake-nltk==1.0.6
 transformers==4.34.0
 sentence-transformers==2.2.2
 scikit-learn==1.3.2
 numpy==1.26.4
 pandas==2.1.1
-# PyTorch components for CPU
+# NOTE: Removed explicit 'rich' pin, relying on Streamlit 1.36.0 to be compatible.
+# PyTorch components must use the '+cpu' tag, which the index above provides.
 torch==2.2.1+cpu
 torchvision==0.17.1+cpu
 torchaudio==2.2.1+cpu
