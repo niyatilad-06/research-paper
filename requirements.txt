@@ -1,4 +1,5 @@
-streamlit==1.38.0
+# Roll back Streamlit to a version known to be stable/less aggressive with rich updates
+streamlit==1.36.0
 PyMuPDF==1.24.9
 nltk==3.8.1
 rake-nltk==1.0.6
@@ -7,9 +8,7 @@ sentence-transformers==2.2.2
 scikit-learn==1.3.2
 numpy==1.26.4
 pandas==2.1.1
-# FIX: Pin rich to resolve the conflict with streamlit 1.38.0
-rich==13.7.0
-# Must include +cpu, which requires the extra_index_url
+# PyTorch components for CPU
 torch==2.2.1+cpu
 torchvision==0.17.1+cpu
 torchaudio==2.2.1+cpu
