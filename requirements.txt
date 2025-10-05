@@ -12,3 +12,4 @@ torchaudio==2.2.1+cpu
 --extra-index-url https://download.pytorch.org/whl/cpu
 rich==13.7.0
 pandas==2.1.1
+
