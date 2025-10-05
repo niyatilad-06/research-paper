@@ -9,7 +9,7 @@ numpy==1.26.4
 pandas==2.1.1
 # FIX: Pin rich to resolve the conflict with streamlit 1.38.0
 rich==13.7.0
-# IMPORTANT: Specify +cpu builds for a stable, cloud-based PyTorch installation
+# Must include +cpu, which requires the extra_index_url
 torch==2.2.1+cpu
 torchvision==0.17.1+cpu
 torchaudio==2.2.1+cpu
