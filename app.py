@@ -129,13 +129,12 @@ def find_related_papers(papers, top_k=2):
 # -------------------------
 st.title("Research Paper Assistant")
 st.markdown(
-    "Upload PDFs to extract **keywords**, generate **summaries**, and suggest **related papers** faster ⚡."
+    "Upload PDFs to extract **keywords**, generate **summaries**."
 )
 
 # Sidebar options
 num_keywords = st.sidebar.slider("Number of keywords", 5, 20, 10)
 summary_length = st.sidebar.slider("Summary max length", 100, 400, 150)
-st.sidebar.info("⚡ Only the first 3 pages of each PDF are processed for speed.")
 
 # Upload PDFs
 uploaded_files = st.file_uploader(
@@ -158,13 +157,13 @@ if uploaded_files:
         with st.expander("Preview extracted text (first 1000 characters)"):
             st.write(text[:1000] + "..." if len(text) > 1000 else text)
 
-        with st.spinner("🧠 Extracting keywords..."):
+        with st.spinner("Extracting keywords..."):
             keywords = extract_keywords(text, num_keywords=num_keywords)
 
-        with st.spinner("✍️ Generating summary..."):
+        with st.spinner("enerating summary..."):
             summary = summarize_text(text, max_length=summary_length)
 
-        st.markdown(f"### 📄 {uploaded_file.name}")
+        st.markdown(f"### {uploaded_file.name}")
         st.subheader("Summary")
         st.write(summary if summary else "Could not generate summary.")
         st.subheader("Keywords")
@@ -173,7 +172,7 @@ if uploaded_files:
         papers.append({"title": uploaded_file.name, "summary": summary})
 
     if len(papers) > 1:
-        st.header("🔍 Suggested Related Papers")
+        st.header("Suggested Related Papers")
         related = find_related_papers(papers, top_k=2)
         for item in related:
             st.markdown(f"**{item['paper']}** is related to:")
@@ -182,3 +181,4 @@ if uploaded_files:
 
 st.markdown("---")
 st.caption("Developed by **Niyati Lad** | Enrollment No: 12202130501046")
+
