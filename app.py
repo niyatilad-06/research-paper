@@ -6,14 +6,8 @@ from rake_nltk import Rake
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 
-# -------------------------
-# MUST BE FIRST STREAMLIT COMMAND
-# -------------------------
 st.set_page_config(page_title="Research Paper Assistant", layout="wide")
 
-# -------------------------
-# Download NLTK resources
-# -------------------------
 @st.cache_resource
 def download_nltk_resources():
     try:
@@ -28,9 +22,6 @@ def download_nltk_resources():
 download_nltk_resources()
 stop_words = set(stopwords.words('english'))
 
-# -------------------------
-# Load models
-# -------------------------
 @st.cache_resource
 def load_summarizer():
     # Use a smaller, faster summarization model
@@ -43,16 +34,13 @@ def load_sentence_model():
 summarizer = load_summarizer()
 sentence_model = load_sentence_model()
 
-# -------------------------
-# Functions
-# -------------------------
 def extract_text_from_pdf(file, max_pages=3):
     """Extract text from only the first few pages to save time."""
     try:
         doc = fitz.open(stream=file.read(), filetype="pdf")
         text = ""
         for i, page in enumerate(doc):
-            if i >= max_pages:  # Only first few pages
+            if i >= max_pages: 
                 break
             text += page.get_text("text")
         return text
@@ -63,7 +51,6 @@ def extract_text_from_pdf(file, max_pages=3):
 def extract_keywords(text, num_keywords=10):
     """Extract keywords using RAKE (optimized for speed)."""
     try:
-        # Use only first few thousand characters for faster processing
         text = text[:5000]
         rake = Rake(stopwords=stop_words)
         rake.extract_keywords_from_text(text)
@@ -92,7 +79,7 @@ def summarize_text(text, max_length=150, min_length=50):
     try:
         chunks = split_into_chunks(text, max_words=250)
         summaries = []
-        for chunk in chunks[:5]:  # summarize fewer chunks for speed
+        for chunk in chunks[:5]:  
             summary = summarizer(
                 chunk,
                 max_length=max_length,
@@ -124,9 +111,6 @@ def find_related_papers(papers, top_k=2):
         st.error(f"Related paper suggestion failed: {e}")
         return []
 
-# -------------------------
-# Streamlit UI
-# -------------------------
 st.title("Research Paper Assistant")
 st.markdown(
     "Upload PDFs to extract **keywords**, generate **summaries**."
@@ -181,4 +165,5 @@ if uploaded_files:
 
 st.markdown("---")
 st.caption("Developed by **Niyati Lad** | Enrollment No: 12202130501046")
+
 
